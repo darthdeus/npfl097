@@ -3,12 +3,11 @@ sys.path.append("/home/darth/projects/master-thesis-code")
 import numpy
 import myopt
 import segmentation
-import ipdb
 
 data = segmentation.load_data()[:1000]
 
 def f(theta):
-    return segmentation.fit(data, theta[0], theta[1])[0].item()
+    return segmentation.Model(alpha = theta[0], p_c = theta[1]).fit(data).final_log_P_data.item()
 
 bounds = [
         myopt.Float(0.1, 5000),
@@ -24,7 +23,5 @@ with open("result.pkl", "wb") as file:
 
 print(result)
 
+import ipdb
 ipdb.set_trace()
-
-
-# ▽f ≝ (∂f/∂x, ∂f/∂y)
