@@ -28,105 +28,120 @@ def cut_words(data, s):
     return words
 
 
-def fit(data, alpha = 100, p_c = 0.5, num_iter = 1000):
-    N = len(data)
-    s = np.random.randint(0, 2, size=N - 2)
+class Model:
+    def __init__(self, alpha = 100, p_c = 0.5):
+        self.alpha = alpha
+        self.p_c = p_c
 
-    words = cut_words(data, s)
+    def P0(self, w_len):
+        U = 1.0/float(self.C)
 
-    count = Counter(words)
-    word_count = sum(count.values())
+        return U**w_len * self.p_c**(w_len-1)
 
-    C = len(set(data))
+    def PW(self, w, w_len, a=0, b=0):
+        return (self.alpha * self.P0(w_len) + self.count[w] + a) / (self.alpha + self.word_count + b)
 
-    def P0(w):
-        U = 1.0/float(C)
+    def log_P_data(self, data, s):
+        return sum([np.log(self.PW(w, len(w))) for w in cut_words(data, s)])
 
-        return U**len(w) * p_c**(len(w)-1)
+    def fit(self, data, num_iter=1000):
+        self.data = data
+        self.N = len(data)
+        self.s = np.random.randint(0, 2, size=self.N - 2)
 
-    def PW(w, a=0, b=0):
-        return (alpha * P0(w) + count[w] + a) / (alpha + word_count + b)
+        words = cut_words(data, self.s)
 
-    def log_P_data(data, s):
-        return sum([np.log(PW(w)) for w in cut_words(data, s)])
+        self.count = Counter(words)
+        self.word_count = sum(self.count.values())
 
-    p_data = []
-    ss = []
+        self.C = len(set(data))
 
-    inner_i = 0
+        p_data = []
+        ss = []
 
-    total_iters = num_iter * (N-2)
-    print_every = total_iters // 500
+        inner_i = 0
 
-    for iter in tqdm(range(num_iter)):
-        for i in np.random.permutation(N - 2):
-            inner_i += 1
+        total_iters = num_iter * (self.N - 2)
+        print_every = total_iters // 500
 
-            prev_left = 0
-            for j in reversed(range(i)):
-                if s[j] == 1:
-                    prev_left = j
-                    break
+        for iter in tqdm(range(num_iter)):
+            for i in np.random.permutation(self.N - 2):
+                inner_i += 1
 
-            next_right = len(s)
-            for j in range(i + 1, len(s)):
-                if s[j] == 1:
-                    next_right = j
-                    break
+                prev_left = 0
+                for j in reversed(range(i)):
+                    if self.s[j] == 1:
+                        prev_left = j
+                        break
 
-            prev_word = data[prev_left:i]
-            next_word = data[i:next_right]
-            joined_word = prev_word + next_word
+                next_right = len(self.s)
+                for j in range(i + 1, len(self.s)):
+                    if self.s[j] == 1:
+                        next_right = j
+                        break
 
-            if s[i] == 0:
-                count[joined_word] = max(0, count[joined_word] - 1)
-                word_count -= 1
-            else:
-                count[prev_word] = max(0, count[prev_word] - 1)
-                count[next_word] = max(0, count[next_word] - 1)
-                word_count -= 2
+                prev_word = data[prev_left:i]
+                prev_len = i - prev_left
 
-    #         p0 = (alpha * P0(joined_word) + count[joined_word]) / (alpha + word_count)
+                next_word = data[i:next_right]
+                next_len = next_right - i
 
-    #         a = (alpha * P0(prev_word) + count[prev_word]) / (alpha + word_count)
-    #         b = (alpha * P0(next_word) + count[next_word]) / (alpha + word_count + 1)
-    #         p1 =  a * b
+                joined_word = prev_word + next_word
+                joined_len = next_right - prev_left
 
-            p0 = PW(joined_word)
-            p1 = PW(prev_word) * PW(next_word, b=1)
+                if self.s[i] == 0:
+                    self.count[joined_word] = max(0, self.count[joined_word] - 1)
+                    self.word_count -= 1
+                else:
+                    self.count[prev_word] = max(0, self.count[prev_word] - 1)
+                    self.count[next_word] = max(0, self.count[next_word] - 1)
+                    self.word_count -= 2
 
-    #         assert np.all(np.fromiter(count.values(), dtype=np.int32) >= 0)
+        #         p0 = (alpha * P0(joined_word) + count[joined_word]) / (alpha + word_count)
 
-            if (random.random() * (p0 + p1)) < p1:
-                s[i] = 0
-            else:
-                s[i] = 1
+        #         a = (alpha * P0(prev_word) + count[prev_word]) / (alpha + word_count)
+        #         b = (alpha * P0(next_word) + count[next_word]) / (alpha + word_count + 1)
+        #         p1 =  a * b
 
-            if s[i] == 0:
-                count[joined_word] += 1
-                word_count += 1
-            else:
-                count[prev_word] += 1
-                count[next_word] += 1
-                word_count += 2
+                p0 = self.PW(joined_word, joined_len)
+                p1 = self.PW(prev_word, prev_len) * self.PW(next_word, next_len, b=1)
 
-            if inner_i % print_every == 0:
-                p_data.append(log_P_data(data, s))
-                ss.append(s.copy())
+        #         assert np.all(np.fromiter(count.values(), dtype=np.int32) >= 0)
 
-    return log_P_data(data, s), s, p_data, ss
+                if (random.random() * (p0 + p1)) < p1:
+                    self.s[i] = 0
+                else:
+                    self.s[i] = 1
+
+                if self.s[i] == 0:
+                    self.count[joined_word] += 1
+                    self.word_count += 1
+                else:
+                    self.count[prev_word] += 1
+                    self.count[next_word] += 1
+                    self.word_count += 2
+
+                if inner_i % print_every == 0:
+                    p_data.append(self.log_P_data(data, self.s))
+                    ss.append(self.s.copy())
+
+        self.final_log_P_data = self.log_P_data(data, self.s)
+        self.history_p_data = p_data
+        self.history_s = ss
+
+        return self
 
 
-def plot_results(log_P, s, p_data, ss):
-    print(log_P)
+    def plot_results(self):
+        print(self.final_log_P_data)
 
-    plt.figure(figsize=(15, 4))
-    plt.subplot(131)
-    plt.imshow(np.array(ss), aspect="auto")
+        plt.figure(figsize=(15, 4))
+        plt.subplot(131)
+        plt.imshow(np.array(self.history_s), aspect="auto")
 
-    plt.subplot(132)
-    plt.plot(np.sum(ss - np.roll(ss, 1), axis=1))
+        plt.subplot(132)
+        plt.plot(np.sum(self.history_s - np.roll(self.history_s, 1), axis=1))
 
-    plt.subplot(133)
-    plt.plot(p_data[10:])
+        plt.subplot(133)
+        plt.plot(self.history_log_P_data)
 
