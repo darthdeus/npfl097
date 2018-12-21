@@ -2,6 +2,8 @@ import sys
 sys.path.append("/home/darth/projects/master-thesis-code")
 import numpy
 import myopt
+
+import pyximport; pyximport.install()
 import segmentation
 
 data = segmentation.load_data()[:1000]
