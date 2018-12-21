@@ -17,7 +17,7 @@ def load_data():
 
 
 def cut_words(data, s):
-    s_idx = np.where(s)[0] + 1
+    s_idx = np.where(s)[0]
     N = len(data)
 
     idx_start = np.hstack([np.array([0]), s_idx])
@@ -33,21 +33,21 @@ class Model:
         self.alpha = alpha
         self.p_c = p_c
 
-    def P0(self, w_len):
+    def P0(self, w):
         U = 1.0/float(self.C)
 
-        return U**w_len * self.p_c**(w_len-1)
+        return U**len(w) * self.p_c**(len(w)-1)
 
-    def PW(self, w, w_len, a=0, b=0):
-        return (self.alpha * self.P0(w_len) + self.count[w] + a) / (self.alpha + self.word_count + b)
+    def PW(self, w, a=0, b=0):
+        return (self.alpha * self.P0(w) + self.count[w] + a) / (self.alpha + self.word_count + b)
 
     def log_P_data(self, data, s):
-        return sum([np.log(self.PW(w, len(w))) for w in cut_words(data, s)])
+        return sum([np.log(self.PW(w)) for w in cut_words(data, s)])
 
     def fit(self, data, num_iter=1000):
         self.data = data
         self.N = len(data)
-        self.s = np.random.randint(0, 2, size=self.N - 2)
+        self.s = np.random.randint(0, 2, size=self.N)
 
         words = cut_words(data, self.s)
 
@@ -61,12 +61,15 @@ class Model:
 
         inner_i = 0
 
-        total_iters = num_iter * (self.N - 2)
-        print_every = total_iters // 500
+        total_iters = num_iter * (self.N)
+        print_every = total_iters // 100
 
         for iter in tqdm(range(num_iter)):
-            for i in np.random.permutation(self.N - 2):
+            for i in np.random.permutation(self.N):
                 inner_i += 1
+
+                if i == 0 or i == self.N - 1:
+                    continue
 
                 prev_left = 0
                 for j in reversed(range(i)):
@@ -81,20 +84,27 @@ class Model:
                         break
 
                 prev_word = data[prev_left:i]
-                prev_len = i - prev_left
-
                 next_word = data[i:next_right]
-                next_len = next_right - i
-
                 joined_word = prev_word + next_word
-                joined_len = next_right - prev_left
 
                 if self.s[i] == 0:
-                    self.count[joined_word] = max(0, self.count[joined_word] - 1)
+                    # assert self.count[joined_word] > 0, f"got count 0 for {joined_word} = {prev_word} + {next_word}"
+
+                    self.count[joined_word] -= 1
+                    # self.count[joined_word] = max(0, self.count[joined_word] - 1)
                     self.word_count -= 1
                 else:
-                    self.count[prev_word] = max(0, self.count[prev_word] - 1)
-                    self.count[next_word] = max(0, self.count[next_word] - 1)
+                    # if self.count[next_word] == 0 or self.count[prev_word] == 0:
+                    #     import ipdb
+                    #     ipdb.set_trace()
+                    #
+                    # assert self.count[prev_word] > 0, f"got count 0 for {joined_word} = {prev_word} + {next_word}"
+                    # assert self.count[next_word] > 0, f"got count 0 for {joined_word} = {prev_word} + {next_word}"
+
+                    self.count[prev_word] -= 1
+                    self.count[next_word] -= 1
+                    # self.count[prev_word] = max(0, self.count[prev_word] - 1)
+                    # self.count[next_word] = max(0, self.count[next_word] - 1)
                     self.word_count -= 2
 
         #         p0 = (alpha * P0(joined_word) + count[joined_word]) / (alpha + word_count)
@@ -103,10 +113,10 @@ class Model:
         #         b = (alpha * P0(next_word) + count[next_word]) / (alpha + word_count + 1)
         #         p1 =  a * b
 
-                p0 = self.PW(joined_word, joined_len)
-                p1 = self.PW(prev_word, prev_len) * self.PW(next_word, next_len, b=1)
+                p0 = self.PW(joined_word)
+                p1 = self.PW(prev_word) * self.PW(next_word, b=1)
 
-        #         assert np.all(np.fromiter(count.values(), dtype=np.int32) >= 0)
+                # assert np.all(np.fromiter(self.count.values(), dtype=np.int32) >= 0)
 
                 if (random.random() * (p0 + p1)) < p1:
                     self.s[i] = 0
@@ -143,5 +153,9 @@ class Model:
         plt.plot(np.sum(self.history_s - np.roll(self.history_s, 1), axis=1))
 
         plt.subplot(133)
-        plt.plot(self.history_log_P_data)
+        plt.plot(self.history_p_data[2:])
+
+        plt.show()
+
+        return " ".join(cut_words(self.data, self.s))[:2000]
 
