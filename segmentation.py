@@ -10,12 +10,14 @@ from tqdm.auto import tqdm
 import math
 
 
-def load_data():
+def load_data(strip_unicode=False):
     with open("data/eng-input.txt", "r") as f:
         data = f.read().replace("\n", "")
 
-    # TODO: remove this later!
-    return unidecode(data)
+    if strip_unicode:
+        return unidecode(data)
+    else:
+        return data
 
 
 def cut_words(data, s):
@@ -100,32 +102,17 @@ class Model:
                     assert count[joined_word] > 0, f"got count 0 for {joined_word} = {prev_word} + {next_word}"
 
                     count[joined_word] -= 1
-                    # count[joined_word] = max(0, count[joined_word] - 1)
                     word_count -= 1
                 else:
-                    # if count[next_word] == 0 or count[prev_word] == 0:
-                    #     import ipdb
-                    #     ipdb.set_trace()
-                    #
                     assert count[prev_word] > 0 and count[next_word] > 0, \
                             f"got count 0 for {joined_word} = {prev_word} + {next_word}"
 
                     count[prev_word] -= 1
                     count[next_word] -= 1
-                    # count[prev_word] = max(0, count[prev_word] - 1)
-                    # count[next_word] = max(0, count[next_word] - 1)
                     word_count -= 2
-
-        #         p0 = (alpha * P0(joined_word) + count[joined_word]) / (alpha + word_count)
-
-        #         a = (alpha * P0(prev_word) + count[prev_word]) / (alpha + word_count)
-        #         b = (alpha * P0(next_word) + count[next_word]) / (alpha + word_count + 1)
-        #         p1 =  a * b
 
                 p0 = PW(joined_word)
                 p1 = PW(prev_word) * PW(next_word, b=1)
-
-                # assert np.all(np.fromiter(count.values(), dtype=np.int32) >= 0)
 
                 if (random.random() * (p0 + p1)) < p1:
                     s[i] = 0
